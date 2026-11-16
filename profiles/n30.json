@@ -1,0 +1,31 @@
+{
+  "name": "n30",
+  "description": "N30 wiring and explicitly simulated link state only; no attached chip models",
+  "sources": [
+    "kincony-n30/boards/KINCONY_N30/pins.csv",
+    "kincony-n30/boards/KINCONY_N30/mpconfigboard.h",
+    "kincony-n30/boards/KINCONY_N30/mpconfigboard.cmake (sdkconfig.240mhz)"
+  ],
+  "cpu_hz": 240000000,
+  "aliases": {
+    "I2C_SDA": 18, "I2C_SCL": 17,
+    "ETH_SCK": 42, "ETH_MOSI": 43, "ETH_MISO": 44,
+    "ETH_CS": 41, "ETH_INT": 2, "ETH_RST": 1,
+    "LORA_SCK": 13, "LORA_MOSI": 12, "LORA_MISO": 11,
+    "LORA_CS": 14, "LORA_RST": 21, "LORA_INT": 47,
+    "ARM_TX": 10, "ARM_RX": 9,
+    "SD_MOSI": 40, "SD_SCK": 39, "SD_MISO": 38, "SD_CS": 48, "SD_CD": 8,
+    "FREE_15": 15, "FREE_16": 16, "BOOT": 0
+  },
+  "i2c": [{"id": 0, "sda": "I2C_SDA", "scl": "I2C_SCL"}],
+  "spi": [
+    {"id": 1, "sck": "ETH_SCK", "mosi": "ETH_MOSI", "miso": "ETH_MISO"},
+    {"id": 2, "sck": "LORA_SCK", "mosi": "LORA_MOSI", "miso": "LORA_MISO"}
+  ],
+  "uart": [{"id": 1, "tx": "ARM_TX", "rx": "ARM_RX"}],
+  "network": [
+    {"kind": "LAN", "id": 0, "active": true, "connected": true,
+     "ifconfig": ["192.0.2.30", "255.255.255.0", "192.0.2.1", "192.0.2.53"]},
+    {"kind": "WLAN", "id": 0, "active": false, "connected": false}
+  ]
+}

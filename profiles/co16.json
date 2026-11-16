@@ -1,0 +1,36 @@
+{
+  "name": "co16",
+  "description": "CO16 wiring and explicitly simulated link state only; no attached chip models",
+  "sources": [
+    "kincony-co16/ports/esp32/boards/KINCONY_CO16/pins.csv",
+    "kincony-co16/ports/esp32/boards/KINCONY_CO16/mpconfigboard.h",
+    "kincony-co16/ports/esp32/boards/KINCONY_CO16/mpconfigboard.cmake (sdkconfig.240mhz)"
+  ],
+  "cpu_hz": 240000000,
+  "aliases": {
+    "I2C_SDA": 8, "I2C_SCL": 18,
+    "SPI_MOSI": 10, "SPI_MISO": 12, "SPI_SCK": 11,
+    "LCD_CS": 4, "LCD_DC": 0, "LCD_RST": 5, "LCD_BL": 40,
+    "SD_CS": 9, "PT100_CS": 14, "PT100_RDY": 21, "PT100_S1": 7, "PT100_S2": 21,
+    "LORA_CS": 13, "LORA_RST": 5, "LORA_INT": 40,
+    "ETH_SCK": 1, "ETH_MOSI": 2, "ETH_MISO": 41,
+    "ETH_CS": 42, "ETH_INT": 43, "ETH_RST": 44,
+    "RS485_RX": 38, "RS485_TX": 39, "TUYA_RX": 17, "TUYA_TX": 16, "RF_RX": 6,
+    "SIM7600_RX": 47, "SIM7600_TX": 48, "KNX_RX": 47, "KNX_TX": 48, "BOOT": 0
+  },
+  "i2c": [{"id": 0, "sda": "I2C_SDA", "scl": "I2C_SCL"}],
+  "spi": [
+    {"id": 1, "sck": "ETH_SCK", "mosi": "ETH_MOSI", "miso": "ETH_MISO"},
+    {"id": 2, "sck": "SPI_SCK", "mosi": "SPI_MOSI", "miso": "SPI_MISO"}
+  ],
+  "uart": [
+    {"id": 0, "tx": "SIM7600_TX", "rx": "SIM7600_RX"},
+    {"id": 1, "tx": "RS485_TX", "rx": "RS485_RX"},
+    {"id": 2, "tx": "TUYA_TX", "rx": "TUYA_RX"}
+  ],
+  "network": [
+    {"kind": "LAN", "id": 0, "active": true, "connected": true,
+     "ifconfig": ["192.0.2.16", "255.255.255.0", "192.0.2.1", "192.0.2.53"]},
+    {"kind": "WLAN", "id": 0, "active": false, "connected": false}
+  ]
+}

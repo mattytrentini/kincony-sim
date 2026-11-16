@@ -1,0 +1,12 @@
+{
+  "name": "generic",
+  "description": "Explicit synthetic demonstration state, not a board pinout",
+  "cpu_hz": 100000000,
+  "aliases": {"DEMO_IN": "demo_input"},
+  "pins": [{"id": "DEMO_IN", "mode": "IN", "pull": null, "level": 0}],
+  "network": [
+    {"kind": "LAN", "id": 0, "active": true, "connected": true,
+     "ifconfig": ["192.0.2.10", "255.255.255.0", "192.0.2.1", "192.0.2.53"]},
+    {"kind": "WLAN", "id": 0, "active": false, "connected": false}
+  ]
+}

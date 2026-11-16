@@ -1,0 +1,6 @@
+{
+  "deps": [
+    ["github:mattytrentini/framebuf_canvas", "7e3479b2b0a7eab1074df3e707c75e6f1abe6ce8"],
+    ["github:mattytrentini/micropython-mock-machine", "de6e14afc0031649538c405b51b58c54889fc698"]
+  ]
+}

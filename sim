@@ -1,0 +1,152 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Matt Trentini
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+IMAGE='micropython/unix:v1.29.0@sha256:a176e29293235bc69829edd0e37be68ab77d18fc2b2817cd8cabed3ac564e8fb'
+MANIFEST_HASH=$(sha256sum "$ROOT/dependencies.json")
+MANIFEST_HASH=${MANIFEST_HASH%% *}
+CACHE="$ROOT/.cache/$MANIFEST_HASH"
+
+fail() { printf '%s\n' "sim: $*" >&2; exit 2; }
+usage() {
+    cat <<'USAGE'
+Usage:
+  ./sim prepare
+  ./sim run [--name NAME] [--profile generic|n30|co16|FILE] [--port HOST:CONTAINER] APPLICATION [args...]
+  ./sim doctor [--name NAME] [--profile generic|n30|co16|FILE]
+  ./sim test [--name NAME]
+
+Only prepare downloads dependencies/the pinned image. run executes the supplied
+script, not a substitute application. Ports bind explicitly to 127.0.0.1 only.
+N30/CO16 profiles are wiring/state configuration, not working board emulators.
+USAGE
+}
+
+[ "$#" -gt 0 ] || { usage; exit 2; }
+COMMAND=$1
+shift
+case "$COMMAND" in
+    help|-h|--help) usage; exit 0 ;;
+    prepare|run|doctor|test) ;;
+    *) fail "unknown command: $COMMAND (see ./sim help)" ;;
+esac
+command -v docker >/dev/null 2>&1 || fail "Docker CLI is required; no host Python/pip is used"
+
+if [ "$COMMAND" = prepare ]; then
+    [ "$#" -eq 0 ] || fail "prepare takes no options"
+    docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE"
+    if [ -f "$CACHE/.prepared" ]; then
+        printf '%s\n' "Dependencies already prepared: $MANIFEST_HASH"
+        exit 0
+    fi
+    mkdir -p "$ROOT/.cache"
+    STAGING=$(mktemp -d "$ROOT/.cache/.prepare.XXXXXX")
+    trap 'rm -rf -- "$STAGING"' EXIT HUP INT TERM
+    docker run --rm --pull=never --init --read-only \
+        --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 \
+        --memory 256m --user "$(id -u):$(id -g)" \
+        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=32m \
+        --mount "type=bind,src=$ROOT,dst=/sim,readonly" \
+        --mount "type=bind,src=$STAGING,dst=/install" \
+        --env MICROPYPATH=/install:.frozen --workdir /tmp \
+        "$IMAGE" -X heapsize=8M /sim/runtime/prepare.py
+    printf '%s\n' "$MANIFEST_HASH" > "$STAGING/.prepared"
+    # A concurrent prepare may already have published the same immutable cache.
+    if [ ! -f "$CACHE/.prepared" ]; then
+        mv -T -- "$STAGING" "$CACHE"
+    fi
+    exit 0
+fi
+
+NAME=default
+PROFILE="$ROOT/profiles/generic.json"
+PORTS=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --name|--profile|--port)
+            OPTION=$1
+            [ "$#" -ge 2 ] || fail "$OPTION requires a value"
+            case "$OPTION" in
+                --name) NAME=$2 ;;
+                --profile)
+                    [ "$COMMAND" != test ] || fail "test does not accept --profile"
+                    case "$2" in
+                        generic|n30|co16) PROFILE="$ROOT/profiles/$2.json" ;;
+                        *) PROFILE=$2 ;;
+                    esac ;;
+                --port)
+                    [ "$COMMAND" = run ] || fail "--port is available only for run"
+                    HOST_PORT=${2%%:*}
+                    CONTAINER_PORT=${2#*:}
+                    case "$HOST_PORT:$CONTAINER_PORT" in
+                        *[!0-9:]*|:*|*:|*:*:*) fail "port must be HOST:CONTAINER (numbers only)" ;;
+                    esac
+                    [ "$2" != "$HOST_PORT" ] || fail "port must be HOST:CONTAINER"
+                    [ "${#HOST_PORT}" -le 5 ] && [ "${#CONTAINER_PORT}" -le 5 ] || fail "port out of range"
+                    # Strip leading zeros before shell arithmetic (no octal).
+                    HOST_PORT=$(printf '%s' "$HOST_PORT" | sed 's/^0*//')
+                    CONTAINER_PORT=$(printf '%s' "$CONTAINER_PORT" | sed 's/^0*//')
+                    [ -n "$HOST_PORT" ] && [ -n "$CONTAINER_PORT" ] || fail "port out of range"
+                    [ "$HOST_PORT" -ge 1 ] && [ "$HOST_PORT" -le 65535 ] && \
+                        [ "$CONTAINER_PORT" -ge 1 ] && [ "$CONTAINER_PORT" -le 65535 ] || fail "port out of range"
+                    PORTS="$PORTS $HOST_PORT:$CONTAINER_PORT" ;;
+            esac
+            shift 2 ;;
+        --) shift; break ;;
+        -*) fail "unknown option: $1" ;;
+        *) break ;;
+    esac
+done
+case "$NAME" in
+    ''|*[!a-zA-Z0-9_.-]*) fail "name must contain only letters, digits, underscore, dot or hyphen" ;;
+esac
+[ "${#NAME}" -le 50 ] || fail "name is too long (maximum 50 characters)"
+[ -f "$CACHE/.prepared" ] || fail "dependencies are not prepared for this manifest; run ./sim prepare"
+docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "pinned image is missing; run ./sim prepare"
+
+APP_DIR=
+case "$COMMAND" in
+    run)
+        [ "$#" -ge 1 ] || fail "run requires an application script"
+        APPLICATION=$1
+        shift
+        [ -f "$APPLICATION" ] || fail "application not found: $APPLICATION"
+        APP_DIR=$(CDPATH= cd -- "$(dirname -- "$APPLICATION")" && pwd -P)
+        APP_NAME=$(basename -- "$APPLICATION")
+        set -- /sim/runtime/entry.py /profile.json "/app/$APP_NAME" "$@" ;;
+    doctor)
+        [ "$#" -eq 0 ] || fail "doctor takes no application arguments"
+        set -- /sim/runtime/entry.py /profile.json /sim/examples/diagnostic.py ;;
+    test)
+        [ "$#" -eq 0 ] || fail "test takes no application arguments"
+        set -- /sim/tests/run.py ;;
+esac
+if [ "$COMMAND" != test ]; then
+    [ -f "$PROFILE" ] || fail "profile not found: $PROFILE"
+    PROFILE_DIR=$(CDPATH= cd -- "$(dirname -- "$PROFILE")" && pwd -P)
+    PROFILE="$PROFILE_DIR/$(basename -- "$PROFILE")"
+fi
+# Docker --mount uses commas as separators; reject ambiguous paths explicitly.
+case "$ROOT$APP_DIR$PROFILE" in
+    *,*) fail "mount paths cannot contain commas" ;;
+esac
+set -- "$IMAGE" -X heapsize=8M "$@"
+for PORT in $PORTS; do
+    set -- --publish "127.0.0.1:$PORT" "$@"
+done
+if [ -n "$APP_DIR" ]; then
+    set -- --mount "type=bind,src=$APP_DIR,dst=/app,readonly" "$@"
+fi
+if [ "$COMMAND" != test ]; then
+    set -- --mount "type=bind,src=$PROFILE,dst=/profile.json,readonly" "$@"
+fi
+exec docker run --rm --pull=never --init --interactive \
+    --name "kincony-sim-$NAME" --hostname "$NAME" --read-only \
+    --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 \
+    --memory 256m --user "$(id -u):$(id -g)" \
+    --tmpfs /tmp:rw,nosuid,nodev,noexec,size=32m \
+    --mount "type=bind,src=$ROOT,dst=/sim,readonly" \
+    --mount "type=bind,src=$CACHE,dst=/deps,readonly" \
+    --env MICROPYPATH=/deps:/sim/runtime:.frozen --workdir /tmp "$@"
