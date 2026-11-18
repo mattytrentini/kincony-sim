@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CO16 simulation controls</title>
+  <link rel="stylesheet" href="/sim/static/app.css">
+  <script type="module" src="/sim/static/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to controls</a>
+  <header>
+    <div class="banner"><strong>SIMULATION — NO HARDWARE</strong><span>Synthetic environment; no physical board or relay contacts.</span></div>
+    <h1>CO16 simulation controls</h1>
+    <nav aria-label="Device views"><a href="/">Original device UI</a><a href="/display/">Standalone LCD</a></nav>
+    <p>The original application and drivers read these simulated devices. Control relays in the <a href="/">original device UI</a>; set date/time through its REST API. This panel supplies environmental stimuli, never shadow outputs.</p>
+    <p id="connection-status" role="status">Connecting to simulation…</p>
+    <p id="network-error" class="error" role="alert" hidden></p>
+  </header>
+  <main id="main">
+    <noscript><p class="error">JavaScript is required for live controls and the LCD stream.</p></noscript>
+    <section aria-labelledby="inputs-title">
+      <h2 id="inputs-title">Staged input environment</h2>
+      <p>16 active-low external inputs. Checked means externally active (low). Edits do not reach the model until Apply; the full input form is applied atomically.</p>
+      <form id="inputs-form">
+        <fieldset><legend>External input levels</legend><div id="input-controls" class="channel-grid"></div></fieldset>
+        <fieldset><legend>Advanced register / fault stimulus</legend>
+          <p>Normal configuration is 65535 (all inputs), polarity 0. Other configurations can make the real application reject I/O reads. Nothing automatically repairs these registers.</p>
+          <div class="fields">
+            <label for="input-config">Configuration (0–65535)<input id="input-config" name="config" type="number" min="0" max="65535" step="1" required></label>
+            <label for="input-polarity">Polarity (0–65535)<input id="input-polarity" name="polarity" type="number" min="0" max="65535" step="1" required></label>
+          </div>
+        </fieldset>
+        <div class="actions"><button type="submit">Apply input environment</button><button type="button" class="secondary" data-discard>Discard input edits</button></div>
+        <p id="inputs-status" class="form-status" role="status">Waiting for the first snapshot.</p>
+      </form>
+      <p id="input-environment" class="muted">Waiting for applied environment.</p>
+    </section>
+    <section aria-labelledby="io-title" class="decoded">
+      <h2 id="io-title">Actual decoded I/O — read only</h2>
+      <p>Fresh reads through the original PCF8575 / XL9535 drivers, separate from staged environment values. Relay signal readback is <strong>not contact feedback</strong>.</p>
+      <p id="io-status" role="status">Waiting for actual I/O.</p>
+      <p id="io-error" class="error" role="alert" hidden></p>
+      <h3>Inputs observed by the application</h3><div id="decoded-inputs" class="channel-grid"></div>
+      <h3>Relay signals observed by the application</h3><div id="decoded-relays" class="channel-grid"></div>
+      <p id="io-raw" class="muted"></p>
+      <p><a href="/">Control relays in the original device UI</a></p>
+    </section>
+    <section aria-labelledby="rtc-title">
+      <h2 id="rtc-title">RTC environment and actual decoded clock</h2>
+      <p id="clock-readback">Waiting for the original DS3231 driver.</p>
+      <p id="clock-error" class="error" role="alert" hidden></p>
+      <p>This is the simulated device clock, not the browser clock. Date/time has no timezone conversion. Reading does not set time or clear OSF.</p>
+      <form id="rtc-form">
+        <label class="check" for="rtc-osf"><input id="rtc-osf" name="osf" type="checkbox">Oscillator stop flag (OSF) stimulus — clock untrusted</label>
+        <div class="actions"><button type="submit">Apply OSF stimulus</button><button type="button" class="secondary" data-discard>Discard OSF edits</button></div>
+        <p id="rtc-status" class="form-status" role="status">Waiting for the first snapshot.</p>
+      </form>
+      <p id="rtc-environment" class="muted"></p>
+      <p>Set date/time through the <a href="/api/v1/time">original clock API</a>: <code>POST /api/v1/time</code> with <code>{"datetime":"2026-01-01T12:00:00"}</code>. An explicit clock write clears OSF; the device dashboard displays time but has no clock editor.</p>
+    </section>
+    <section aria-labelledby="faults-title">
+      <h2 id="faults-title">Device online / offline fault stimulus</h2>
+      <p>Offline I²C devices raise real bus errors; restoring them allows normal reads to recover. Each device has its own explicit Apply.</p>
+      <p class="warning"><strong>LCD faults are fatal to the original LCD task.</strong> An offline SPI write stops drawing. Restoring LCD online does not restart it; restart the simulator process to resume. HTTP remains available.</p>
+      <div id="device-controls" class="device-grid"></div>
+    </section>
+    <section aria-labelledby="lcd-title" class="lcd-section">
+      <div>
+        <h2 id="lcd-title">Live 320 × 240 RGB565 LCD</h2>
+        <p>Pixels come from the real ST7789 driver and font, using the shared framebuffer canvas viewer, not a recreated screen or a physical panel photograph.</p>
+        <p id="lcd-status" role="status">Connecting to LCD stream…</p>
+        <p id="lcd-error" class="error" role="alert" hidden></p>
+        <p id="lcd-task" role="status">Waiting for LCD task state.</p>
+        <p id="lcd-restart" class="error" role="alert" hidden></p>
+        <p id="lcd-metadata" class="muted"></p>
+        <a href="/display/">Open standalone LCD viewer</a>
+      </div>
+      <div id="lcd-displays" aria-label="Live simulated LCD"></div>
+    </section>
+  </main>
+  <footer>Unauthenticated local simulation controls — do not expose to the Internet. Refresh preserves unsaved and focused edits. POST requests are never automatically retried.</footer>
+</body>
+</html>

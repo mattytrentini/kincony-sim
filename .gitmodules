@@ -10,3 +10,6 @@
 [submodule "lib/sim_devices"]
 	path = lib/sim_devices
 	url = https://github.com/mattytrentini/micropython-sim-devices.git
+[submodule "lib/kincony_co16"]
+	path = lib/kincony_co16
+	url = https://github.com/mattytrentini/kincony-co16-app.git

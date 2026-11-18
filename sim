@@ -16,13 +16,15 @@ Usage:
   ./sim prepare
   ./sim n30 [--name NAME] [--port HOST:8080]
   ./sim test-n30 [--name NAME]
+  ./sim co16 [--name NAME] [--port HOST:8080]
+  ./sim test-co16 [--name NAME]
   ./sim run [--name NAME] [--profile generic|n30|co16|FILE] [--port HOST:CONTAINER] APPLICATION [args...]
   ./sim doctor [--name NAME] [--profile generic|n30|co16|FILE]
   ./sim test [--name NAME]
 
 Only prepare downloads dependencies/the pinned image. run executes the supplied
 script, not a substitute application. Ports bind explicitly to 127.0.0.1 only.
-N30 runs the real board application; CO16 remains a wiring-only profile.
+N30 and CO16 commands run their real board applications with device models.
 USAGE
 }
 
@@ -31,7 +33,7 @@ COMMAND=$1
 shift
 case "$COMMAND" in
     help|-h|--help) usage; exit 0 ;;
-    prepare|run|doctor|test|n30|test-n30) ;;
+    prepare|run|doctor|test|n30|test-n30|co16|test-co16) ;;
     *) fail "unknown command: $COMMAND (see ./sim help)" ;;
 esac
 command -v docker >/dev/null 2>&1 || fail "Docker CLI is required; no host Python/pip is used"
@@ -68,6 +70,8 @@ PORTS=
 case "$COMMAND" in
     n30) NAME=n30; PROFILE="$ROOT/profiles/n30.json" ;;
     test-n30) NAME=n30-test ;;
+    co16) NAME=co16; PROFILE="$ROOT/profiles/co16.json" ;;
+    test-co16) NAME=co16-test ;;
 esac
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -78,7 +82,7 @@ while [ "$#" -gt 0 ]; do
                 --name) NAME=$2 ;;
                 --profile)
                     case "$COMMAND" in
-                        test|test-n30|n30) fail "$COMMAND does not accept --profile" ;;
+                        test|test-n30|test-co16|n30|co16) fail "$COMMAND does not accept --profile" ;;
                     esac
                     case "$2" in
                         generic|n30|co16) PROFILE="$ROOT/profiles/$2.json" ;;
@@ -86,8 +90,8 @@ while [ "$#" -gt 0 ]; do
                     esac ;;
                 --port)
                     case "$COMMAND" in
-                        run|n30) ;;
-                        *) fail "--port is available only for run or n30" ;;
+                        run|n30|co16) ;;
+                        *) fail "--port is available only for run, n30 or co16" ;;
                     esac
                     HOST_PORT=${2%%:*}
                     CONTAINER_PORT=${2#*:}
@@ -102,7 +106,9 @@ while [ "$#" -gt 0 ]; do
                     [ -n "$HOST_PORT" ] && [ -n "$CONTAINER_PORT" ] || fail "port out of range"
                     [ "$HOST_PORT" -ge 1 ] && [ "$HOST_PORT" -le 65535 ] && \
                         [ "$CONTAINER_PORT" -ge 1 ] && [ "$CONTAINER_PORT" -le 65535 ] || fail "port out of range"
-                    [ "$COMMAND" != n30 ] || [ "$CONTAINER_PORT" -eq 8080 ] || fail "n30 listens on container port 8080"
+                    case "$COMMAND" in
+                        n30|co16) [ "$CONTAINER_PORT" -eq 8080 ] || fail "$COMMAND listens on container port 8080" ;;
+                    esac
                     PORTS="$PORTS $HOST_PORT:$CONTAINER_PORT" ;;
             esac
             shift 2 ;;
@@ -118,8 +124,11 @@ esac
 [ -f "$CACHE/.prepared" ] || fail "dependencies are not prepared for this manifest; run ./sim prepare"
 docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "pinned image is missing; run ./sim prepare"
 
-if [ "$COMMAND" = n30 ] && [ -z "$PORTS" ]; then
-    PORTS="8080:8080"
+if [ -z "$PORTS" ]; then
+    case "$COMMAND" in
+        n30) PORTS="8080:8080" ;;
+        co16) PORTS="8081:8080" ;;
+    esac
 fi
 APP_DIR=
 case "$COMMAND" in
@@ -131,26 +140,27 @@ case "$COMMAND" in
         APP_DIR=$(CDPATH= cd -- "$(dirname -- "$APPLICATION")" && pwd -P)
         APP_NAME=$(basename -- "$APPLICATION")
         set -- /sim/runtime/entry.py /profile.json "/app/$APP_NAME" "$@" ;;
-    n30)
-        [ "$#" -eq 0 ] || fail "n30 takes no application arguments"
-        [ -f "$ROOT/lib/kincony_n30/main.py" ] || fail "initialize sources: git submodule update --init --recursive"
+    n30|co16)
+        [ "$#" -eq 0 ] || fail "$COMMAND takes no application arguments"
+        [ -f "$ROOT/lib/kincony_$COMMAND/main.py" ] || fail "initialize sources: git submodule update --init lib/kincony_$COMMAND"
         for PORT in $PORTS; do
             HOST_PORT=${PORT%%:*}
-            printf '%s\n' "N30 http://127.0.0.1:$HOST_PORT/  OLED /display/  Controls /sim/"
+            printf '%s\n' "$COMMAND http://127.0.0.1:$HOST_PORT/  Display /display/  Controls /sim/"
         done
-        set -- /sim/runtime/entry.py /profile.json /sim/apps/n30.py ;;
+        set -- /sim/runtime/entry.py /profile.json "/sim/apps/$COMMAND.py" ;;
     doctor)
         [ "$#" -eq 0 ] || fail "doctor takes no application arguments"
         set -- /sim/runtime/entry.py /profile.json /sim/examples/diagnostic.py ;;
     test)
         [ "$#" -eq 0 ] || fail "test takes no application arguments"
         set -- /sim/tests/run.py ;;
-    test-n30)
-        [ "$#" -eq 0 ] || fail "test-n30 takes no application arguments"
-        [ -f "$ROOT/lib/kincony_n30/main.py" ] || fail "initialize sources: git submodule update --init --recursive"
-        set -- /sim/tests/n30.py ;;
+    test-n30|test-co16)
+        [ "$#" -eq 0 ] || fail "$COMMAND takes no application arguments"
+        BOARD=${COMMAND#test-}
+        [ -f "$ROOT/lib/kincony_$BOARD/main.py" ] || fail "initialize sources: git submodule update --init lib/kincony_$BOARD"
+        set -- "/sim/tests/$BOARD.py" ;;
 esac
-if [ "$COMMAND" != test ] && [ "$COMMAND" != test-n30 ]; then
+if [ "$COMMAND" != test ] && [ "$COMMAND" != test-n30 ] && [ "$COMMAND" != test-co16 ]; then
     [ -f "$PROFILE" ] || fail "profile not found: $PROFILE"
     PROFILE_DIR=$(CDPATH= cd -- "$(dirname -- "$PROFILE")" && pwd -P)
     PROFILE="$PROFILE_DIR/$(basename -- "$PROFILE")"
@@ -166,7 +176,7 @@ done
 if [ -n "$APP_DIR" ]; then
     set -- --mount "type=bind,src=$APP_DIR,dst=/app,readonly" "$@"
 fi
-if [ "$COMMAND" != test ] && [ "$COMMAND" != test-n30 ]; then
+if [ "$COMMAND" != test ] && [ "$COMMAND" != test-n30 ] && [ "$COMMAND" != test-co16 ]; then
     set -- --mount "type=bind,src=$PROFILE,dst=/profile.json,readonly" "$@"
 fi
 exec docker run --rm --pull=never --init --interactive \

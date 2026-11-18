@@ -1,9 +1,9 @@
 # KinCony Unix simulator
 
-Run the **real N30 application**, web dashboard, native OLED drawing and metering
-decoder on an unchanged published MicroPython Unix image. Reusable digital
-peripheral models supply GPIO, SSD1306 I2C and ARM Modbus RTU responses.
-The foundation also runs supplied scripts; CO16 remains a wiring-only profile.
+Run the **real N30 and CO16 applications**, web dashboards and display drawing
+on an unchanged published MicroPython Unix image. Reusable digital peripheral
+models provide actual driver-level GPIO, I2C, UART and SPI transactions.
+The foundation also runs supplied scripts without board-specific chip models.
 No custom firmware/image build, host Python, pip, Node or Compose is needed.
 Runtime prerequisites are Linux, a working Docker CLI/daemon, a POSIX shell and
 ordinary Linux utilities (`sha256sum`, `id`, `mktemp`, etc.).
@@ -19,9 +19,11 @@ cd kincony-sim
 Initialize the pinned application source, prepare libraries once, then launch:
 
 ```sh
-git submodule update --init lib/kincony_n30
+git submodule update --init lib/kincony_n30 lib/kincony_co16
 ./sim prepare
 ./sim n30
+# Or launch the CO16 instead, on host port 8081:
+# ./sim co16
 ```
 
 Open these on the Docker host:
@@ -31,19 +33,29 @@ Open these on the Docker host:
 | http://127.0.0.1:8080/ | Original N30 dashboard and GPIO15/16 output controls |
 | http://127.0.0.1:8080/display/ | Live OLED Canvas over WebSocket |
 | http://127.0.0.1:8080/sim/ | Synthetic inputs, all 30 currents, voltage/frequency and communication faults |
+| http://127.0.0.1:8081/ | Original CO16 dashboard, 16 relay controls and clock readback |
+| http://127.0.0.1:8081/display/ | Live 320×240 RGB565 LCD Canvas over WebSocket |
+| http://127.0.0.1:8081/sim/ | 16 digital input stimuli, register/RTC flags and per-device faults |
 
 For another instance/host port:
 
 ```sh
 ./sim n30 --name bench --port 8090:8080
+./sim co16 --name co16-bench --port 8091:8080
 ```
 
 Stop with Ctrl-C or `docker stop kincony-sim-n30` (or `kincony-sim-bench`).
 State is disposable: a fresh process starts GPIO15/16 as inputs without pulls
 or saved output commands, and restores the explicit synthetic meter defaults.
 No hardware devices are accessed or passed through.
+CO16 uses container name `kincony-sim-co16`; stop it with Ctrl-C or
+`docker stop kincony-sim-co16`. N30 and CO16 can run simultaneously at their
+different default host ports. A fresh CO16 starts with relay latch `0xffff`
+(all signals OFF), all digital inputs idle, input configuration `0xffff`,
+polarity zero and all devices online. The explicit synthetic RTC starts at
+2026-01-01 00:00:00, OSF clear; it is not a hardware or host clock reading.
 
-### Simulation controls
+### N30 simulation controls
 
 `/sim/` distinguishes **staged edits**, applied environmental inputs, and the
 real application's cached decoded observations. Saves are explicit and atomic;
@@ -77,6 +89,48 @@ Invalid shapes, nonfinite/out-of-range values and unknown fields fail atomically
 Controls are unauthenticated and published only on host loopback; do not expose
 them to the Internet.
 
+### CO16 simulation controls
+
+Launch with **`./sim co16`**. The original application at `/` owns all relay
+commands and clock setting; `/sim/` only supplies environmental stimuli.
+No second CO16 provider, output bank or browser-ticking clock is substituted.
+
+- Stage any of 16 active-low external inputs, then Apply atomically. Advanced
+  input configuration/polarity are explicit register stimuli. A non-all-input
+  configuration makes the real application return `503`; neither app nor panel
+  silently repairs it. Decoded polarity handling uses the original XL9535 driver.
+- Relay readback is the real PCF8575 sampled control port, **not contact feedback**.
+  Use the original dashboard for relay commands; each actual driver write
+  preserves unrelated channel bits. Startup/LCD/GETs perform no I2C control writes.
+- The real DS3231 driver reads a ticking, timezone-naive BCD calendar. Toggle OSF
+  to test untrusted time; set time through the original clock REST API. That actual
+  register write clears OSF while preserving unrelated status bits. Reads do not
+  set time or clear flags.
+
+  ```sh
+  curl -X POST http://127.0.0.1:8081/api/v1/time \
+    -H 'Content-Type: application/json' -d '{"datetime":"2028-02-29T12:34:56"}'
+  ```
+- Per-device online controls inject I2C/SPI `EIO`, not zeros. I2C restoration
+  recovers the real read paths. A fatal LCD SPI error stops the original drawing
+  task but not HTTP. Restoring LCD online **does not restart it**; restart the
+  process. A connected Canvas can retain its last frame; worker status warns.
+- The unchanged ST7789 driver, CO16 bus configuration and ROM font generate the
+  actual splash/status/error pixel stream. Generic SPI/Pin observers model the
+  controller; a 40ms publisher pump coalesces dirty drawing bursts before taking
+  RGB565 snapshots. This is a logical pixel view, not a physical-panel photograph.
+
+CO16 simulation JSON routes: `GET /sim/api/state`, `POST /sim/api/inputs`
+with any nonempty subset of `active` (16 strict booleans), `config` and `polarity`
+(unsigned 16-bit integers), `POST /sim/api/rtc` with `{"osf":boolean}`, and
+`POST /sim/api/devices/<relays|inputs|rtc|lcd>` with `{"online":boolean}`.
+Validation is atomic; responses are no-store. Model metadata/environment settings
+remain distinct from actual decoded reads and independent unavailable resources.
+These unauthenticated controls are for host loopback, not the Internet.
+
+The existing CO16 application does not initialize its ADS1115 ADCs, EEPROM or
+optional modules, so these are not invented by the simulator.
+
 ### Supplied applications and diagnostics
 
 ```sh
@@ -99,8 +153,8 @@ Preparation runs the image's `mip` into a fresh staging directory, verifies
 required imports/APIs, native-framebuffer integration and viewer assets, then
 publishes `.cache/<full-manifest-sha256>/`. Failed preparation never marks a cache
 ready. Changing the manifest requires a fresh explicit `./sim prepare`. A missing
-cache/image produces an actionable error; `n30`, `run`, `doctor`, `test` and
-`test-n30` never install, download, pull or retry. `prepare` reuses a completed cache.
+cache/image produces an actionable error; board runs, generic runs, diagnostics
+and tests never install, download, pull or retry. `prepare` reuses a completed cache.
 Delete only the relevant `.cache/<hash>` directory to deliberately refresh it.
 
 Applications run as scripts, with `__name__ == '__main__'`, their arguments in
@@ -108,8 +162,8 @@ Applications run as scripts, with `__name__ == '__main__'`, their arguments in
 sibling imports supported. The application directory is mounted read-only at
 `/app`; use `/tmp` for disposable output. Extra files outside the application
 directory are not implicitly mounted. Exceptions/nonzero `SystemExit` propagate
-through Docker to the shell. N30 startup composes the original board app, not a
-high-level substitute board implementation.
+through Docker to the shell. Board startup composes each original application,
+not a high-level substitute board implementation.
 
 ## Isolation and ports
 
@@ -133,8 +187,9 @@ Container names are `kincony-sim-<name>`; a duplicate live name fails instead of
 attaching to or restarting another instance. Names label instances, not boards.
 Stop an instance with Ctrl-C or `docker stop kincony-sim-first`.
 
-Generic runs publish no host ports unless explicitly requested; `n30` defaults to
-`8080:8080`. Port syntax is numeric `HOST:CONTAINER`, always bound to **127.0.0.1**:
+Generic runs publish no host ports unless requested. N30 defaults to
+`8080:8080`, CO16 to `8081:8080`. Numeric `HOST:CONTAINER` mappings always bind
+to **127.0.0.1**:
 
 ```sh
 ./sim run --name display --port 8080:8080 examples/display.py
@@ -160,8 +215,8 @@ imports so successive in-process sessions do not reuse stale HAL references.
 Native `time`, `gc`, `os`, `framebuf`, `asyncio`, and `micropython` remain native;
 there is no fake `os.uname()` or ESP32 interpreter identity.
 The stock image does not expose `os.uname()`; diagnostics use `sys.platform`.
-N30 supplies an explicit `identity_provider` to its board constructor and stores
-that identity for the OLED. Hardware keeps its default native `os.uname()` path;
+Both boards accept an explicit `identity_provider`; CO16 reports the native Unix
+MicroPython release, not an ESP32 identity. Hardware keeps native `os.uname()`;
 no native `os`, `time`, `gc`, `framebuf` or networking sockets are replaced.
 
 Supported profile fields:
@@ -207,7 +262,7 @@ pixels, and explicit network transitions with actual assertions and outputs.
 It creates only clearly synthetic test devices, not a W5500, RTC, relay expander,
 meter coprocessor, or display-controller emulator.
 
-**Not implemented:** CO16 chip models/application startup, N30 LoRa/SD/EEPROM
+**Not implemented:** ADC/EEPROM/optional LoRa, SD, PT100, KNX or other peripheral
 models, electrical timing/contention/calibration, physical networking, hardware
 validation, native ESP32-only modules, or arbitrary firmware compatibility.
 
@@ -218,6 +273,7 @@ After preparation, run explicitly:
 ```sh
 ./sim test
 ./sim test-n30
+./sim test-co16
 ./tests/cli.sh
 ```
 
@@ -238,11 +294,18 @@ unavailable-versus-zero semantics, live OLED refresh and a second clean session
 after driven outputs and injected faults. It needs no hardware, published ports
 or additional test package.
 
-`lib/kincony_n30` is the pinned **runtime application source**; initialize it as
-shown above. Its root hardware mip manifest deliberately installs `../main.py`
-and flat Microdot, so it is not used for simulation. SSD1306 and the actual
-umodbus client are separately mip-installed at the same immutable source pins
-used by the board project.
+`test-co16` exercises the original app over real TCP: all sixteen relay bits and
+inputs, unrelated-bit preservation, polarity/configuration, independent I2C
+faults and recovery, readonly RTC/OSF and ticking leap midnight, actual RGB565
+LCD states, HTTP during the splash, safe clean restart and HTTP survival after
+a fatal display error. No hardware, host-published test ports or unittest package
+are required by these application scenarios.
+
+`lib/kincony_n30` and `lib/kincony_co16` are the pinned **runtime application
+sources**; initialize them as shown above. Their hardware manifests install
+`../main.py` and flat Microdot, so they are not used for simulation. Actual
+SSD1306/umodbus and PCF8575/XL9535/DS3231/ST7789/config/font drivers are separately
+mip-installed at the same immutable pins used by the respective board projects.
 
 `lib/framebuf_canvas`, `lib/mock_machine` and `lib/sim_devices` are pinned library
 source/development references; runtime imports use **mip-installed** cache copies,
@@ -250,7 +313,7 @@ not these library checkouts. Publish tested library changes before updating
 manifest/submodule SHAs, then explicitly prepare and test. Never use branch-name
 runtime pins or vendor driver replacements. For all development references use
 `git submodule update --init --recursive`; nested firmware trees are not needed
-to run the N30 application.
+to run either application.
 
 The mock library's upstream `Makefile` discovers `test/test_*.py` using
 `unittest_junit` in MicroPython; its new `test/test_mock_network.py` follows that
@@ -271,11 +334,20 @@ real client, CRC failure/recovery and matching Canvas/controller pixel checksums
 The controls were visually checked at desktop and 390px mobile widths.
 No physical board was accessed, flashed or used for these checks.
 
+CO16 verification passed 25 new model/unchanged-driver tests plus 24 HAL/network
+contracts, and three real HTTP application sessions. These covered all relay
+and input channels, zero startup/GET control writes, fault recovery, leap-midnight
+RTC ticking, actual RGB565 LCD states, safe restart and HTTP survival after
+fatal LCD failure. Browser checks covered cross-page relay/input control,
+OSF and I2C faults, dirty-form preservation, pixel-checksum parity and desktop/
+390px mobile rendering without page overflow. Hardware remained untouched.
+
 ## License
 
 Own framework/application-integration/model code is MIT; see `LICENSE`.
-framebuf_canvas, Microdot, micropython-mock-machine and the official SSD1306
-driver are MIT-licensed, with notices retained in the mip installation.
+framebuf_canvas, Microdot, micropython-mock-machine and the selected SSD1306,
+PCF8575, XL9535, DS3231 and ST7789/config/font drivers are MIT-licensed, with
+their original notices retained in the prepared installation.
 The mock library pins its official logging dependency rather than an unversioned
 latest.
 

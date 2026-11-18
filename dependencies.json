@@ -1,9 +1,14 @@
 {
   "deps": [
     ["github:mattytrentini/framebuf_canvas", "7e3479b2b0a7eab1074df3e707c75e6f1abe6ce8"],
-    ["github:mattytrentini/micropython-mock-machine", "398db0308eea0ae7e56e2ae0bd65b1cb6f0373c7"],
-    ["github:mattytrentini/micropython-sim-devices", "b3b83af28f076faea8b223b9538f8e4b696af6ce"],
+    ["github:mattytrentini/micropython-mock-machine", "4c43d68963407c2dfaad5102a783ad8a29aa45ba"],
+    ["github:mattytrentini/micropython-sim-devices", "bb5dddad1f192719215992c95ea2914543932c00"],
     ["github:micropython/micropython-lib/micropython/drivers/display/ssd1306/ssd1306.py", "92ee97d94c4b558cf4e6d27a4534401f1e9b9f50"],
-    ["github:brainelectronics/micropython-modbus", "e9ab05a2f1b37796446208a024368725953fc299"]
+    ["github:brainelectronics/micropython-modbus", "e9ab05a2f1b37796446208a024368725953fc299"],
+    ["github:mcauser/micropython-pcf8575", "8d4c54e852e5dfd5f9f92ba5c2b95246e913d3b7"],
+    ["github:mattytrentini/micropython-xl9535", "4d44bb450306c38270f09a53b75e5c1f414c08e9"],
+    ["github:mattytrentini/micropython-DS3231-AT24C32", "44654c959fabd0f0bd27b4977ebd5dee29753516"],
+    ["github:mattytrentini/st7789py_mpy", "d0fc6454d34cd3b3e90ac891fd63ccad8c3d10a0"],
+    ["github:mattytrentini/st7789py_mpy/romfonts/vga1_8x16.py", "d0fc6454d34cd3b3e90ac891fd63ccad8c3d10a0"]
   ]
 }
