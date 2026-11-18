@@ -1,6 +1,9 @@
 {
   "deps": [
     ["github:mattytrentini/framebuf_canvas", "7e3479b2b0a7eab1074df3e707c75e6f1abe6ce8"],
-    ["github:mattytrentini/micropython-mock-machine", "de6e14afc0031649538c405b51b58c54889fc698"]
+    ["github:mattytrentini/micropython-mock-machine", "398db0308eea0ae7e56e2ae0bd65b1cb6f0373c7"],
+    ["github:mattytrentini/micropython-sim-devices", "b3b83af28f076faea8b223b9538f8e4b696af6ce"],
+    ["github:micropython/micropython-lib/micropython/drivers/display/ssd1306/ssd1306.py", "92ee97d94c4b558cf4e6d27a4534401f1e9b9f50"],
+    ["github:brainelectronics/micropython-modbus", "e9ab05a2f1b37796446208a024368725953fc299"]
   ]
 }

@@ -4,3 +4,9 @@
 [submodule "lib/mock_machine"]
 	path = lib/mock_machine
 	url = https://github.com/mattytrentini/micropython-mock-machine.git
+[submodule "lib/kincony_n30"]
+	path = lib/kincony_n30
+	url = https://github.com/mattytrentini/kincony-n30.git
+[submodule "lib/sim_devices"]
+	path = lib/sim_devices
+	url = https://github.com/mattytrentini/micropython-sim-devices.git

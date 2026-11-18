@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>N30 simulation controls</title>
+  <link rel="stylesheet" href="/sim/static/app.css">
+  <script type="module" src="/sim/static/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to controls</a>
+  <header>
+    <div class="banner"><strong>SIMULATION — NO HARDWARE</strong><span>Changes affect this simulated N30 only.</span></div>
+    <div class="heading">
+      <h1>N30 simulation controls</h1>
+      <nav aria-label="Device views"><a href="/">Original device UI</a><a href="/display/">Standalone OLED</a></nav>
+    </div>
+    <p>Environment inputs below feed the real application and Modbus decoder. Outputs and GPIO modes are controlled only in the <a href="/">original device UI</a>.</p>
+    <p id="connection-status" role="status">Connecting to simulation…</p>
+    <p id="network-error" class="error" role="alert" hidden></p>
+  </header>
+  <main id="main">
+    <noscript><p class="error">JavaScript is required for live controls and the OLED stream. The original device UI remains available above.</p></noscript>
+    <section aria-labelledby="gpio-title">
+      <h2 id="gpio-title">Shared GPIO controller</h2>
+      <p>Raw levels and direction are read from the same pins used by the application. Unknown is not low. Inject only into inputs; release removes the external drive. Choosing a level does not apply it until you press Apply.</p>
+      <div id="pins" class="pin-grid" aria-busy="true"></div>
+    </section>
+    <section aria-labelledby="meters-title">
+      <h2 id="meters-title">Meter environment and actual decoded readings</h2>
+      <p>Three banks, 30 channels. Each save applies one complete bank atomically. Injected values are synthetic targets, not decoded readings. The real driver observes changes on its next normal poll; bank polling takes several seconds.</p>
+      <p class="muted">Defaults: 0 A, 230 V, 50 Hz. Current precision: 0.001 A; voltage and frequency: 0.01. No power or energy model; unknown registers remain reserved.</p>
+      <div id="banks" class="bank-grid" aria-busy="true"></div>
+    </section>
+    <section class="oled-section" aria-labelledby="oled-title">
+      <div>
+        <h2 id="oled-title">Live OLED from the real SSD1306 driver</h2>
+        <p id="oled-status" role="status">Connecting to OLED stream…</p>
+        <p id="oled-error" class="error" role="alert" hidden></p>
+        <p id="oled-metadata" class="muted">Waiting for controller metadata.</p>
+        <p>The canvas uses the shared framebuffer viewer. It is not a recreated application display.</p>
+        <p><a href="/display/">Open standalone OLED viewer</a></p>
+      </div>
+      <div id="oled-displays" aria-label="Live simulated OLED"></div>
+    </section>
+    <section aria-labelledby="transport-title">
+      <h2 id="transport-title">Real Modbus transport activity</h2>
+      <p id="modbus-metadata">Waiting for transport counters.</p>
+      <p class="muted">Timeout drops the response. CRC fault corrupts the response checksum, so the existing driver rejects it. Select Normal and save to recover on the next poll.</p>
+    </section>
+  </main>
+  <footer>Unauthenticated local simulation controls. Do not expose this service to the Internet. Unsaved edits are preserved during refresh; requests are never automatically re-sent.</footer>
+</body>
+</html>
